@@ -1,0 +1,83 @@
+# Role & Context
+You are an expert Senior Full-Stack Engineer and System Architect specializing in the Next.js App Router, Tailwind CSS, TypeScript, Clerk Auth, Neon Serverless Postgres, and Drizzle ORM. 
+
+We are building a highly-optimized, automated Affiliate Curation and Price-Tracking Engine for SHEIN products. Our target is programmatic SEO and clean, premium visual merchandising to drive high conversions. 
+
+## Core Architecture Guidelines
+- Use Next.js 14/15 App Router with TypeScript.
+- Enforce absolute type-safety across database queries, APIs, and components.
+- Maximize Server Components for SEO indexing and performance. Use Client Components ('use client') only when tracking state, handling user interactions, or utilizing Clerk components that require it.
+- Database layer: Drizzle ORM communicating with a Neon Serverless Postgres instance.
+
+---
+
+## 1. Database Schema (`src/db/schema.ts`)
+Implement the following database architecture using Drizzle ORM primitives:
+
+1. `products` table:
+   - `id` (serial primary key)
+   - `sheinProductId` (text, unique, indexed)
+   - `title` (text, not null)
+   - `imageUrl` (text, not null)
+   - `currentPrice` (numeric/decimal, precision 10, scale 2)
+   - `originalPrice` (numeric/decimal, precision 10, scale 2)
+   - `rawProductUrl` (text)
+   - `affiliateUrl` (text, not null)
+   - `category` (text, indexed) - e.g., 'y2k-aesthetic', 'minimalist-office'
+   - `isTrending` (boolean, default false)
+   - `updatedAt` (timestamp, default now)
+
+2. `userWatchlist` table:
+   - `id` (serial primary key)
+   - `userId` (text, not null, indexed) -> Maps directly to Clerk's user ID string.
+   - `productId` (integer references products.id with cascade delete)
+   - `targetPrice` (numeric/decimal, precision 10, scale 2)
+   - `createdAt` (timestamp, default now)
+
+*Generate the complete schema file with relations defined clearly.*
+
+---
+
+## 2. Server Utilities: Programmatic Link Builder
+Create a utility function (`src/lib/affiliate.ts`) that takes any standard SHEIN product URL or Product ID, validates it, and wraps it cleanly inside your unique SHEIN affiliate tracking parameters. 
+- Ensure it handles edge cases where users paste links containing existing query strings.
+- Add an optimization helper to format internal clean redirect URLs (e.g., `/go/[productId]`) utilizing Next.js middleware or dynamic route handling to attach cookies server-side seamlessly.
+
+---
+
+## 3. Data Ingestion: Bulk CSV Upload Processor
+Because SHEIN provides CSV product feeds in their affiliate backend, create an authenticated admin route or server action (`src/app/actions/bulk-upload.ts`):
+- Implement an optimized bulk-upsert process using Drizzle's `onConflictDoUpdate` clause.
+- Parse standard affiliate spreadsheet columns: `Product ID`, `Product Name`, `Image URL`, `Sale Price`, `Retail Price`, `Affiliate Link`.
+- Ensure data is automatically typed, scrubbed of anomalies, and synced cleanly to the Neon database.
+
+---
+
+## 4. Authentication Integration (Clerk)
+- Set up Clerk middleware to protect specific user routes (like `/dashboard` and watchlist mutation actions).
+- Keep public routes completely open to anonymous users (`/`, `/lookbook/[category]`, `/product/[id]`) to optimize search engine crawlers.
+- Leverage Clerk's server-side context (`auth()`) inside Next.js Server Actions to securely process when users add or remove items from their price-drop watchlists.
+
+---
+
+## 5. UI Layout & Merchandising (Tailwind CSS)
+The storefront must look premium, minimal, and high-end (similar to Zara or Apple layout styles) to elevate budget products visually.
+- **Main Catalog / Category Page (`src/app/lookbook/[category]/page.tsx`):**
+  - Use Next.js Server Components to fetch curated data directly from Neon via Drizzle.
+  - Implement dynamic routing hooks for automatic category page generation (Programmatic SEO).
+  - UI: Clean grid layouts (`grid-cols-2 md:grid-cols-4 gap-6`).
+- **Product Card Component (`src/components/ProductCard.tsx`):**
+  - Implement `next/image` with proper aspect ratios (`aspect-square` or `aspect-[3/4]`), object positioning (`object-cover`), hover scaling transitions (`group-hover:scale-105 transition-transform duration-300`).
+  - Render a clear, absolute-positioned badge showing discount percentages if `currentPrice` is less than `originalPrice`.
+  - Include an elegant, sleek CTA button ("View Deal") that forwards cleanly through the tracking redirect URL.
+  - Integrate a small heart icon toggle that interacts directly with the Clerk-backed user watchlist server action.
+
+---
+
+## 6. Execution Plan
+Initialize by building files in this exact sequential order:
+1. Initialize the database connection, client singleton, and Drizzle config mapping to Neon.
+2. Build the exact database schema and run the initial migration script.
+3. Write the affiliate tracking link parsing algorithms.
+4. Set up Clerk Auth context layers and route middleware.
+5. Build the core lookbook layouts, product cards, and programmatic SEO routing structures.
