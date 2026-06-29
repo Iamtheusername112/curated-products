@@ -17,7 +17,7 @@ import { formatCategoryLabel } from "@/lib/utils";
 import { resolveProductImageUrl } from "@/lib/images";
 import { getAudienceLabel } from "@/lib/audience";
 import { getProductImageUrls, resolveStoredProductImages } from "@/lib/product-images";
-import { PAGE_CONTAINER, PAGE_EYEBROW, PAGE_HEADING } from "@/lib/layout-classes";
+import { PAGE_CONTAINER } from "@/lib/layout-classes";
 
 type PageProps = {
   params: Promise<{ id: string }>;

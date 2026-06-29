@@ -1,7 +1,6 @@
 import { ProductCard } from "@/components/ProductCard";
 import type { Product } from "@/db/schema";
 import {
-  LOOKBOOK_AUDIENCE_SECTIONS,
   type LookbookSection,
   type ProductAudience,
 } from "@/lib/audience";

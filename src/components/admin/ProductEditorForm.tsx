@@ -347,13 +347,11 @@ export function ProductEditorForm({
 
 type ProductAdminListProps = {
   products: AdminProduct[];
-  categorySlug: string;
   onEdit: (product: AdminProduct) => void;
 };
 
 export function ProductAdminList({
   products,
-  categorySlug,
   onEdit,
 }: ProductAdminListProps) {
   const router = useRouter();
@@ -463,7 +461,6 @@ export function LookbookModeWorkspace({
         </div>
         <ProductAdminList
           products={products}
-          categorySlug={categorySlug}
           onEdit={(product) => setEditingProduct(product)}
         />
       </div>

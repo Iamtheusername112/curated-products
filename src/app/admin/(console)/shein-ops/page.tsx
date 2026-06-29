@@ -13,7 +13,7 @@ import {
   ensureDefaultFrontendCategories,
   getCategoryOptionsForUpload,
 } from "@/lib/cms-queries";
-import { PAGE_CONTAINER, PAGE_EYEBROW, PAGE_HEADING } from "@/lib/layout-classes";
+import { PAGE_CONTAINER } from "@/lib/layout-classes";
 export const metadata: Metadata = {
   title: "SHEIN Ops",
 };

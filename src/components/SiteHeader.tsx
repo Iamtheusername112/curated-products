@@ -3,12 +3,12 @@ import { getActiveFrontendCategories } from "@/lib/cms-queries";
 import { SiteHeaderNav } from "./SiteHeaderNav";
 
 export async function SiteHeader() {
-  const [{ userId, sessionClaims }, categories] = await Promise.all([
+  const [{ userId }, categories] = await Promise.all([
     getAdminAuthContext(),
     getActiveFrontendCategories(),
   ]);
 
-  const showAdminLink = isAdminUser(userId, sessionClaims);
+  const showAdminLink = isAdminUser(userId);
 
   return (
     <SiteHeaderNav

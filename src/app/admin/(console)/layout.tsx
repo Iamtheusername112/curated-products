@@ -7,7 +7,7 @@ export default async function AdminConsoleLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { userId, sessionClaims } = await auth();
+  const { userId } = await auth();
 
   if (!userId) {
     redirect("/sign-in?redirect_url=/admin&intent=admin");
@@ -18,7 +18,7 @@ export default async function AdminConsoleLayout({
     redirect("/admin/not-configured");
   }
 
-  if (!isAdminUser(userId, sessionClaims)) {
+  if (!isAdminUser(userId)) {
     redirect("/admin/forbidden");
   }
 

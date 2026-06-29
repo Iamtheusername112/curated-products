@@ -8,9 +8,9 @@ export const metadata = {
 };
 
 export default async function AdminNotConfiguredPage() {
-  const { userId, sessionClaims } = await auth();
+  const { userId } = await auth();
 
-  if (userId && isAdminUser(userId, sessionClaims) && getSoleAdminUserId()) {
+  if (userId && isAdminUser(userId) && getSoleAdminUserId()) {
     redirect("/admin");
   }
 

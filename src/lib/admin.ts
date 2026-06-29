@@ -45,10 +45,7 @@ export function getSoleAdminUserId(): string | null {
  *
  * There is no UI to create admins, no metadata role bypass, and no dev fallback.
  */
-export function isAdminUser(
-  userId: string | null | undefined,
-  _sessionClaims?: Record<string, unknown> | null | undefined
-): boolean {
+export function isAdminUser(userId: string | null | undefined): boolean {
   if (!userId) return false;
 
   const soleAdminId = getSoleAdminUserId();
@@ -63,12 +60,12 @@ export async function getAdminAuthContext() {
 }
 
 export async function isAdmin(): Promise<boolean> {
-  const { userId, sessionClaims } = await getAdminAuthContext();
-  return isAdminUser(userId, sessionClaims);
+  const { userId } = await getAdminAuthContext();
+  return isAdminUser(userId);
 }
 
 export async function requireAdmin(): Promise<string> {
-  const { userId, sessionClaims } = await getAdminAuthContext();
+  const { userId } = await getAdminAuthContext();
 
   if (!userId) {
     throw new AdminForbiddenError("Sign in required");
@@ -81,7 +78,7 @@ export async function requireAdmin(): Promise<string> {
     );
   }
 
-  if (!isAdminUser(userId, sessionClaims)) {
+  if (!isAdminUser(userId)) {
     throw new AdminForbiddenError("Admin access required");
   }
 
