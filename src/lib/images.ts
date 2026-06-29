@@ -28,7 +28,8 @@ export function isBlockedProductImageUrl(imageUrl: string | null | undefined): b
 }
 
 export function isAdminProductImage(imageUrl: string | null | undefined): boolean {
-  return Boolean(imageUrl?.trim()) && imageUrl.startsWith("/uploads/");
+  if (!imageUrl?.trim()) return false;
+  return imageUrl.trim().startsWith("/uploads/");
 }
 
 export function resolveProductImageUrl(

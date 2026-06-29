@@ -51,7 +51,7 @@ async function findProductForRedirect(
 
   const extractedSheinId = extractSheinProductId(rawId);
   if (extractedSheinId && extractedSheinId !== rawId) {
-    return db.query.products.findFirst({
+    const byExtractedSheinId = await db.query.products.findFirst({
       where: eq(products.sheinProductId, extractedSheinId),
       columns: {
         affiliateUrl: true,
@@ -59,6 +59,10 @@ async function findProductForRedirect(
         sheinProductId: true,
       },
     });
+
+    if (byExtractedSheinId) {
+      return byExtractedSheinId;
+    }
   }
 
   return null;
