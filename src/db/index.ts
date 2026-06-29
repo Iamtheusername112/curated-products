@@ -6,7 +6,10 @@ type Db = NeonHttpDatabase<typeof schema>;
 
 const globalForDb = globalThis as unknown as {
   db: Db | undefined;
+  dbSchemaKey: string | undefined;
 };
+
+const schemaKey = Object.keys(schema).sort().join(",");
 
 function createDb(): Db {
   const connectionString = process.env.DATABASE_URL;
@@ -20,8 +23,9 @@ function createDb(): Db {
 }
 
 export function getDb(): Db {
-  if (!globalForDb.db) {
+  if (!globalForDb.db || globalForDb.dbSchemaKey !== schemaKey) {
     globalForDb.db = createDb();
+    globalForDb.dbSchemaKey = schemaKey;
   }
 
   return globalForDb.db;

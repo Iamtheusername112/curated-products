@@ -1,25 +1,10 @@
-import Image from "next/image";
 import Link from "next/link";
-import { auth } from "@clerk/nextjs/server";
-import { desc, eq } from "drizzle-orm";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { RemoveWatchlistButton } from "@/components/RemoveWatchlistButton";
-import { db } from "@/db";
-import { userWatchlist, type Product } from "@/db/schema";
-import {
-  buildInternalRedirectUrl,
-  formatPrice,
-} from "@/lib/affiliate";
-import { resolveProductImageUrl } from "@/lib/images";
+import { WatchlistItemCard } from "@/components/account/WatchlistItemCard";
+import { getUserWatchlistEntries } from "@/lib/watchlist-queries";
 
-type WatchlistEntryWithProduct = {
-  id: number;
-  userId: string;
-  productId: number;
-  targetPrice: string | null;
-  createdAt: Date;
-  product: Product | null;
-};
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const { userId } = await auth();
@@ -28,97 +13,82 @@ export default async function DashboardPage() {
     redirect("/sign-in");
   }
 
-  let entries: WatchlistEntryWithProduct[] = [];
+  const [entries, user] = await Promise.all([
+    getUserWatchlistEntries(userId),
+    currentUser(),
+  ]);
 
-  try {
-    entries = await db.query.userWatchlist.findMany({
-      where: eq(userWatchlist.userId, userId),
-      with: { product: true },
-      orderBy: [desc(userWatchlist.createdAt)],
-    });
-  } catch {
-    entries = [];
-  }
+  const savedItems = entries;
+  const firstName = user?.firstName?.trim() || "there";
+  const latestSavedAt = savedItems[0]?.createdAt;
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-16">
-      <div className="mb-12">
-        <p className="text-sm tracking-[0.25em] text-muted uppercase">Account</p>
-        <h1 className="mt-3 text-4xl font-light tracking-tight">Your watchlist</h1>
-        <p className="mt-4 max-w-xl text-muted">
-          Items you save here are tracked for price drops. We&apos;ll expand alerts
-          in a future release — for now, check back anytime.
+    <div>
+      <div className="mb-8 md:mb-10">
+        <p className="text-xs tracking-[0.25em] text-muted uppercase">Saved looks</p>
+        <h1 className="mt-3 text-2xl font-light tracking-tight sm:text-3xl md:text-4xl">
+          {firstName}&apos;s watchlist
+        </h1>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted sm:text-base">
+          Every piece you save is stored in your account and persists across sign-ins.
+          {latestSavedAt && savedItems.length > 0 && (
+            <>
+              {" "}
+              Last saved{" "}
+              {latestSavedAt.toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+              .
+            </>
+          )}
         </p>
       </div>
 
-      {entries.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border px-6 py-16 text-center">
-          <p className="text-muted">Your watchlist is empty.</p>
+      <div className="mb-10 grid gap-4 sm:grid-cols-3">
+        <div className="rounded-2xl border border-border bg-white p-5">
+          <p className="text-xs tracking-[0.2em] text-muted uppercase">Saved items</p>
+          <p className="mt-2 text-3xl font-light">{savedItems.length}</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-white p-5">
+          <p className="text-xs tracking-[0.2em] text-muted uppercase">Status</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            {savedItems.length > 0
+              ? "Synced with Neon Postgres — safe after refresh or re-login."
+              : "Save items while browsing to start tracking."}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-white p-5 sm:flex sm:flex-col sm:justify-between">
+          <p className="text-xs tracking-[0.2em] text-muted uppercase">Quick action</p>
           <Link
-            href="/lookbook/y2k-aesthetic"
-            className="mt-4 inline-flex text-sm underline underline-offset-4"
+            href="/lookbook"
+            className="mt-3 inline-flex text-sm font-medium underline underline-offset-4"
+          >
+            Discover new looks
+          </Link>
+        </div>
+      </div>
+
+      {savedItems.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-white px-6 py-16 text-center">
+          <p className="text-lg font-light">No saved looks yet</p>
+          <p className="mx-auto mt-3 max-w-md text-sm text-muted">
+            Tap the heart on any product while browsing. Your watchlist will show up
+            here — separate from the public storefront.
+          </p>
+          <Link
+            href="/lookbook"
+            className="mt-8 inline-flex h-11 items-center rounded-full bg-foreground px-6 text-sm text-background"
           >
             Browse lookbooks
           </Link>
         </div>
       ) : (
-        <div className="divide-y divide-border rounded-2xl border border-border">
-          {entries.map((entry) => {
-            const product = entry.product;
-            if (!product) return null;
-
-            const redirectUrl = buildInternalRedirectUrl(product.sheinProductId);
-            const imageUrl = resolveProductImageUrl(
-              product.sheinProductId,
-              product.imageUrl
-            );
-
-            return (
-              <div
-                key={entry.id}
-                className="flex items-center gap-4 p-4 md:gap-6 md:p-6"
-              >
-                <Link
-                  href={`/product/${product.id}`}
-                  className="relative h-20 w-16 shrink-0 overflow-hidden bg-neutral-100 md:h-24 md:w-20"
-                >
-                  <Image
-                    src={imageUrl}
-                    alt={product.title}
-                    fill
-                    sizes="80px"
-                    className="object-cover"
-                  />
-                </Link>
-
-                <div className="min-w-0 flex-1">
-                  <Link href={`/product/${product.id}`}>
-                    <h2 className="truncate text-sm font-medium md:text-base">
-                      {product.title}
-                    </h2>
-                  </Link>
-                  <p className="mt-1 text-sm text-muted">
-                    Current: {formatPrice(product.currentPrice)}
-                    {entry.targetPrice && (
-                      <> · Target: {formatPrice(entry.targetPrice)}</>
-                    )}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <a
-                    href={redirectUrl}
-                    target="_blank"
-                    rel="noopener noreferrer sponsored"
-                    className="hidden rounded-full border border-border px-4 py-2 text-sm transition-colors hover:border-foreground sm:inline-flex"
-                  >
-                    View Deal
-                  </a>
-                  <RemoveWatchlistButton watchlistId={entry.id} />
-                </div>
-              </div>
-            );
-          })}
+        <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-3 lg:grid-cols-4">
+          {savedItems.map((entry) => (
+            <WatchlistItemCard key={entry.id} entry={entry} />
+          ))}
         </div>
       )}
     </div>

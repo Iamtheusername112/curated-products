@@ -94,12 +94,57 @@ function normalizeAffiliateUrl(
 }
 
 export function buildInternalRedirectUrl(
-  productId: string | number,
+  catalogProductId: string | number,
   baseUrl?: string
 ): string {
-  const id = String(productId);
+  const id = String(catalogProductId);
   const origin = baseUrl ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
   return `${origin}/go/${id}`;
+}
+
+export function resolveAffiliateDestination(
+  affiliateUrl: string,
+  rawProductUrl?: string | null,
+  sheinProductId?: string | null
+): string {
+  const stored = affiliateUrl?.trim();
+  if (stored?.startsWith("http")) {
+    return stored;
+  }
+
+  const fallback = rawProductUrl?.trim() || sheinProductId?.trim() || "";
+  if (fallback) {
+    return buildSheinAffiliateUrl(fallback, stored || undefined);
+  }
+
+  throw new Error("No affiliate destination configured");
+}
+
+function normalizePriceString(raw: string): string {
+  let value = raw
+    .trim()
+    .replace(/[€$£¥\s]/gi, "")
+    .replace(/EUR|USD|GBP/gi, "");
+
+  const hasComma = value.includes(",");
+  const hasDot = value.includes(".");
+
+  if (hasComma && hasDot) {
+    if (value.lastIndexOf(",") > value.lastIndexOf(".")) {
+      value = value.replace(/\./g, "").replace(",", ".");
+    } else {
+      value = value.replace(/,/g, "");
+    }
+  } else if (hasComma) {
+    const [whole, fraction = ""] = value.split(",");
+    if (fraction.length > 0 && fraction.length <= 2) {
+      value = `${whole}.${fraction}`;
+    } else {
+      value = value.replace(/,/g, "");
+    }
+  }
+
+  return value.replace(/[^0-9.]/g, "");
 }
 
 export function parsePrice(value: string | number | null | undefined): string | null {
@@ -107,7 +152,12 @@ export function parsePrice(value: string | number | null | undefined): string | 
     return null;
   }
 
-  const cleaned = String(value).replace(/[^0-9.]/g, "");
+  if (typeof value === "number") {
+    if (Number.isNaN(value) || value < 0) return null;
+    return value.toFixed(2);
+  }
+
+  const cleaned = normalizePriceString(String(value));
   const parsed = Number.parseFloat(cleaned);
 
   if (Number.isNaN(parsed) || parsed < 0) {
@@ -140,5 +190,11 @@ export function formatPrice(price: string | null): string {
     return "—";
   }
 
-  return `$${Number.parseFloat(price).toFixed(2)}`;
+  const amount = Number.parseFloat(price);
+  const currency = process.env.NEXT_PUBLIC_STORE_CURRENCY ?? "EUR";
+
+  return new Intl.NumberFormat("de-DE", {
+    style: "currency",
+    currency,
+  }).format(amount);
 }

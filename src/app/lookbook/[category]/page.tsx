@@ -1,32 +1,52 @@
+export const dynamic = "force-dynamic";
+
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 import { desc, eq } from "drizzle-orm";
-import { ProductCard } from "@/components/ProductCard";
+import {
+  LookbookAudienceNav,
+  LookbookAudienceSections,
+} from "@/components/lookbook/LookbookAudienceSections";
 import { getUserWatchlistedProductIds } from "@/lib/watchlist-queries";
+import {
+  ensureDefaultFrontendCategories,
+  getActiveFrontendCategories,
+  getFrontendCategoryBySlug,
+} from "@/lib/cms-queries";
+import {
+  groupProductsByAudience,
+  getVisibleLookbookSections,
+} from "@/lib/audience";
+import { PAGE_CONTAINER, PAGE_EYEBROW, PAGE_HEADING } from "@/lib/layout-classes";
 import { db } from "@/db";
 import { products } from "@/db/schema";
-import { CURATED_CATEGORIES, formatCategoryLabel } from "@/lib/utils";
 
 type PageProps = {
   params: Promise<{ category: string }>;
 };
 
 export async function generateStaticParams() {
-  return CURATED_CATEGORIES.map((category) => ({
-    category: category.slug,
-  }));
+  try {
+    await ensureDefaultFrontendCategories();
+    const categories = await getActiveFrontendCategories();
+    return categories.map((category) => ({ category: category.slug }));
+  } catch {
+    return [];
+  }
 }
 
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const { category } = await params;
-  const label = formatCategoryLabel(category);
+  const record = await getFrontendCategoryBySlug(category);
+  const label = record?.displayName ?? category;
 
   return {
     title: `${label} Lookbook`,
-    description: `Shop curated ${label.toLowerCase()} SHEIN finds. Premium picks with live pricing and affiliate deals.`,
+    description: `Shop curated ${label.toLowerCase()} SHEIN finds for women, men, and kids.`,
     openGraph: {
       title: `${label} Lookbook | Curated SHEIN`,
       description: `Discover the best ${label.toLowerCase()} styles from SHEIN.`,
@@ -46,10 +66,12 @@ async function getCategoryProducts(category: string) {
 }
 
 export default async function LookbookCategoryPage({ params }: PageProps) {
-  const { category } = await params;
-  const isKnownCategory = CURATED_CATEGORIES.some((c) => c.slug === category);
+  await ensureDefaultFrontendCategories();
 
-  if (!isKnownCategory) {
+  const { category } = await params;
+  const categoryRecord = await getFrontendCategoryBySlug(category);
+
+  if (!categoryRecord || !categoryRecord.isActive) {
     notFound();
   }
 
@@ -58,37 +80,50 @@ export default async function LookbookCategoryPage({ params }: PageProps) {
   const watchlistedIds = userId
     ? await getUserWatchlistedProductIds(userId)
     : new Set<number>();
-  const label = formatCategoryLabel(category);
+
+  const grouped = groupProductsByAudience(categoryProducts);
+  const visibleSections = getVisibleLookbookSections(categoryProducts);
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-16">
-      <div className="mb-12 max-w-2xl">
-        <p className="text-sm tracking-[0.25em] text-muted uppercase">Lookbook</p>
-        <h1 className="mt-3 text-4xl font-light tracking-tight md:text-5xl">
-          {label}
-        </h1>
+    <div className={`${PAGE_CONTAINER} py-12 md:py-16`}>
+      <div className="mb-8 max-w-2xl md:mb-10">
+        <p className={PAGE_EYEBROW}>Lookbook</p>
+        <h1 className={`mt-3 ${PAGE_HEADING}`}>{categoryRecord.displayName}</h1>
         <p className="mt-4 text-muted leading-relaxed">
-          A curated edit of {label.toLowerCase()} pieces — styled for discovery,
-          indexed for search, and updated as prices change.
+          {categoryRecord.description ??
+            `A curated edit of ${categoryRecord.displayName.toLowerCase()} pieces — browse by women, men, or kids.`}
         </p>
       </div>
 
       {categoryProducts.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border px-6 py-16 text-center">
-          <p className="text-muted">
-            No products in this lookbook yet. Upload a CSV from the admin dashboard.
+          <p className="text-muted">No products in this lookbook yet.</p>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+            Add products to this mood from the admin dashboard and assign each one
+            to Women, Men, or Kids (Boys / Girls).
           </p>
+          <Link
+            href={`/admin/lookbooks/${categoryRecord.slug}`}
+            className="mt-6 inline-flex h-11 items-center rounded-full bg-foreground px-6 text-sm text-background"
+          >
+            Add products in admin
+          </Link>
+          <Link
+            href="/lookbook"
+            className="mt-3 block text-sm text-muted underline underline-offset-4"
+          >
+            ← All lookbooks
+          </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
-          {categoryProducts.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              isWatchlisted={watchlistedIds.has(product.id)}
-            />
-          ))}
-        </div>
+        <>
+          <LookbookAudienceNav visibleSections={visibleSections} />
+          <LookbookAudienceSections
+            watchlistedIds={watchlistedIds}
+            grouped={grouped}
+            visibleSections={visibleSections}
+          />
+        </>
       )}
     </div>
   );

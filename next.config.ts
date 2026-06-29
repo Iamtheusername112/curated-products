@@ -1,6 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["cheerio"],
+  serverActions: {
+    bodySizeLimit: "100mb",
+  },
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "100mb",
+    },
+    middlewareClientMaxBodySize: "100mb",
+  },
   images: {
     remotePatterns: [
       {

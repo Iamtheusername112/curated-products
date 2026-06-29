@@ -1,25 +1,37 @@
 import Link from "next/link";
-import Image from "next/image";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray, sql, asc } from "drizzle-orm";
 import { auth } from "@clerk/nextjs/server";
 import { ProductCard } from "@/components/ProductCard";
+import { CountdownSaleBanner } from "@/components/CountdownSaleBanner";
+import { FeaturedLookSection } from "@/components/home/FeaturedLookSection";
+import { HomeHero } from "@/components/home/HomeHero";
+import { LookbookCategoryCard } from "@/components/home/LookbookCategoryCard";
+import { MemberHome } from "@/components/home/MemberHome";
+import { TrustStrip } from "@/components/home/TrustStrip";
+import { WatchlistInvitation } from "@/components/home/WatchlistInvitation";
 import { db } from "@/db";
 import { products } from "@/db/schema";
-import { getUserWatchlistedProductIds } from "@/lib/watchlist-queries";
-import { autoFixBrokenProductImages } from "@/lib/catalog-maintenance";
-import { CURATED_CATEGORIES } from "@/lib/utils";
-import { resolveProductImageUrl } from "@/lib/images";
+import {
+  ensureDefaultFrontendCategories,
+  ensureDefaultSiteSettings,
+  getActiveFrontendCategories,
+  getSiteSettingsMap,
+} from "@/lib/cms-queries";
+import { getUserWatchlistedProductIds, getUserWatchlistEntries } from "@/lib/watchlist-queries";
+import { SITE_SETTING_KEYS, parseBooleanSetting } from "@/lib/site-settings";
+import { resolveCategoryCoverUrl, resolveCoverImageForDisplay } from "@/lib/images";
+import { PAGE_CONTAINER, PAGE_EYEBROW, PAGE_HEADING, PRODUCT_GRID } from "@/lib/layout-classes";
 
-async function getFeaturedProducts() {
+async function getFeaturedProducts(trendingOnly: boolean) {
   try {
-    const trending = await db.query.products.findMany({
-      where: eq(products.isTrending, true),
-      orderBy: [desc(products.updatedAt)],
-      limit: 8,
-    });
+    if (trendingOnly) {
+      const trending = await db.query.products.findMany({
+        where: eq(products.isTrending, true),
+        orderBy: [desc(products.updatedAt)],
+        limit: 8,
+      });
 
-    if (trending.length > 0) {
-      return trending;
+      if (trending.length > 0) return trending;
     }
 
     return await db.query.products.findMany({
@@ -31,23 +43,21 @@ async function getFeaturedProducts() {
   }
 }
 
-async function getCategoryCovers() {
+async function getCategoryCovers(categorySlugs: string[]) {
   const covers = new Map<string, string>();
 
   try {
     await Promise.all(
-      CURATED_CATEGORIES.map(async (category) => {
+      categorySlugs.map(async (slug) => {
         const product = await db.query.products.findFirst({
-          where: eq(products.category, category.slug),
+          where: eq(products.category, slug),
           orderBy: [desc(products.updatedAt)],
-          columns: { imageUrl: true, sheinProductId: true },
+          columns: { imageUrl: true },
         });
 
-        if (product?.imageUrl) {
-          covers.set(
-            category.slug,
-            resolveProductImageUrl(product.sheinProductId, product.imageUrl)
-          );
+        const cover = resolveCategoryCoverUrl(product?.imageUrl);
+        if (cover) {
+          covers.set(slug, cover);
         }
       })
     );
@@ -58,108 +68,196 @@ async function getCategoryCovers() {
   return covers;
 }
 
+async function getCategoryStats(slugs: string[]) {
+  const counts = new Map<string, number>();
+  const minPrices = new Map<string, string>();
+
+  if (slugs.length === 0) {
+    return { counts, minPrices };
+  }
+
+  try {
+    const countRows = await db
+      .select({
+        category: products.category,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(products)
+      .where(inArray(products.category, slugs))
+      .groupBy(products.category);
+
+    for (const row of countRows) {
+      if (row.category) counts.set(row.category, row.count);
+    }
+
+    await Promise.all(
+      slugs.map(async (slug) => {
+        const cheapest = await db.query.products.findFirst({
+          where: eq(products.category, slug),
+          orderBy: [asc(products.currentPrice)],
+          columns: { currentPrice: true },
+        });
+
+        if (cheapest?.currentPrice) {
+          minPrices.set(slug, cheapest.currentPrice);
+        }
+      })
+    );
+  } catch {
+    // ignore
+  }
+
+  return { counts, minPrices };
+}
+
 export default async function HomePage() {
-  await autoFixBrokenProductImages();
+  await Promise.all([
+    ensureDefaultSiteSettings(),
+    ensureDefaultFrontendCategories(),
+  ]);
 
   const { userId } = await auth();
-  const [featuredProducts, categoryCovers] = await Promise.all([
-    getFeaturedProducts(),
-    getCategoryCovers(),
-  ]);
+  const settings = await getSiteSettingsMap();
+  const activeCategories = await getActiveFrontendCategories();
+
+  const showCountdownBanner = parseBooleanSetting(
+    settings.get(SITE_SETTING_KEYS.SHOW_COUNTDOWN_SALE_BANNER),
+    false
+  );
+  const showTrendingCarousel = parseBooleanSetting(
+    settings.get(SITE_SETTING_KEYS.SHOW_TRENDING_CAROUSEL),
+    true
+  );
+
+  const promoText =
+    settings.get(SITE_SETTING_KEYS.ACTIVE_PROMO_BANNER) ??
+    "Summer edit — extra 15% off select styles";
+
+  const categorySlugs = activeCategories.map((category) => category.slug);
+
+  const [featuredProducts, categoryCovers, categoryStats, watchlistEntries] =
+    await Promise.all([
+      getFeaturedProducts(showTrendingCarousel),
+      getCategoryCovers(categorySlugs),
+      getCategoryStats(categorySlugs),
+      userId ? getUserWatchlistEntries(userId) : Promise.resolve([]),
+    ]);
+
   const watchlistedIds = userId
     ? await getUserWatchlistedProductIds(userId)
     : new Set<number>();
 
+  if (userId) {
+    const memberTrending = featuredProducts.slice(0, 8);
+
+    return (
+      <div>
+        {showCountdownBanner && <CountdownSaleBanner promoText={promoText} />}
+        <MemberHome
+          watchlistEntries={watchlistEntries}
+          activeCategories={activeCategories}
+          categoryCovers={categoryCovers}
+          categoryStats={categoryStats}
+          trendingProducts={memberTrending}
+          watchlistedIds={watchlistedIds}
+        />
+      </div>
+    );
+  }
+
+  const heroImageUrl =
+    resolveCategoryCoverUrl(featuredProducts[0]?.imageUrl) ??
+    categoryCovers.values().next().value ??
+    null;
+
+  const primaryLookbookHref = activeCategories[0]
+    ? `/lookbook/${activeCategories[0].slug}`
+    : "/lookbook";
+
+  const featuredLookProducts =
+    featuredProducts.length >= 3
+      ? featuredProducts.slice(0, 3)
+      : featuredProducts.slice(0, 1);
+  const trendingProducts =
+    featuredProducts.length >= 3
+      ? featuredProducts.slice(3, 11)
+      : featuredProducts.slice(featuredLookProducts.length, 9);
+
   return (
     <div>
-      <section className="mx-auto max-w-7xl px-6 py-20 md:py-28">
-        <div className="max-w-2xl">
-          <p className="text-sm tracking-[0.25em] text-muted uppercase">
-            Curated Fashion
-          </p>
-          <h1 className="mt-4 text-4xl font-light tracking-tight md:text-6xl">
-            Premium lookbooks for SHEIN finds
-          </h1>
-          <p className="mt-6 text-lg leading-relaxed text-muted">
-            Discover hand-picked styles across trending aesthetics. Save items to
-            your watchlist and get notified when prices drop.
-          </p>
-        </div>
-      </section>
+      {showCountdownBanner && <CountdownSaleBanner promoText={promoText} />}
 
-      <section className="mx-auto max-w-7xl px-6 pb-16">
-        <div className="mb-10 flex items-end justify-between">
-          <div>
-            <h2 className="text-2xl font-light tracking-tight">Shop by mood</h2>
-            <p className="mt-2 text-sm text-muted">
-              Programmatic lookbooks built for discovery and SEO.
+      <HomeHero heroImageUrl={heroImageUrl} primaryLookbookHref={primaryLookbookHref} />
+      <TrustStrip />
+
+      {activeCategories.length > 0 && (
+        <section className={`${PAGE_CONTAINER} py-16 md:py-24 lg:py-28`}>
+          <div className="mb-8 max-w-2xl md:mb-12">
+            <p className={PAGE_EYEBROW}>Shop by mood</p>
+            <h2 className={`mt-3 ${PAGE_HEADING}`}>
+              Find your aesthetic in one scroll
+            </h2>
+            <p className="mt-4 text-base leading-relaxed text-muted sm:text-lg">
+              Each lookbook is a styled edit — pick a vibe, shop the pieces, save
+              what you love.
             </p>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {CURATED_CATEGORIES.map((category) => {
-            const coverImage = categoryCovers.get(category.slug);
-
-            return (
-              <Link
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {activeCategories.map((category) => (
+              <LookbookCategoryCard
                 key={category.slug}
-                href={`/lookbook/${category.slug}`}
-                className="group relative flex min-h-56 items-end overflow-hidden rounded-2xl border border-border bg-neutral-100 p-6 transition-shadow hover:shadow-lg"
-              >
-                {coverImage ? (
-                  <Image
-                    src={coverImage}
-                    alt={category.label}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 33vw"
-                    className="object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                ) : null}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/10" />
-                <div className="relative">
-                  <p className="text-xs tracking-[0.2em] text-white/80 uppercase">
-                    Lookbook
-                  </p>
-                  <h3 className="mt-1 text-2xl font-light text-white">
-                    {category.label}
-                  </h3>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
+                category={category}
+                coverImage={resolveCoverImageForDisplay(
+                  category.coverImageUrl,
+                  categoryCovers.get(category.slug)
+                )}
+                productCount={categoryStats.counts.get(category.slug) ?? 0}
+                fromPrice={categoryStats.minPrices.get(category.slug) ?? null}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
-      {featuredProducts.length > 0 ? (
-        <section className="mx-auto max-w-7xl px-6 pb-24">
-          <div className="mb-10">
-            <h2 className="text-2xl font-light tracking-tight">Featured picks</h2>
-            <p className="mt-2 text-sm text-muted">
-              Fresh products synced from your affiliate feed.
+      <FeaturedLookSection
+        products={featuredLookProducts}
+        watchlistedIds={watchlistedIds}
+      />
+
+      {trendingProducts.length > 0 ? (
+        <section className={`${PAGE_CONTAINER} pb-16 md:pb-24`}>
+          <div className="mb-8 md:mb-10">
+            <p className={PAGE_EYEBROW}>Trending now</p>
+            <h2 className="mt-3 text-2xl font-light tracking-tight sm:text-3xl md:text-4xl">
+              What everyone&apos;s adding to cart this week
+            </h2>
+            <p className="mt-3 text-sm text-muted sm:text-base">
+              Hand-picked today. Priced to move.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
-            {featuredProducts.map((product) => (
+          <div className={PRODUCT_GRID}>
+            {trendingProducts.map((product) => (
               <ProductCard
                 key={product.id}
                 product={product}
                 isWatchlisted={watchlistedIds.has(product.id)}
+                ctaLabel="Get this look"
               />
             ))}
           </div>
         </section>
       ) : (
-        <section className="mx-auto max-w-7xl px-6 pb-24">
+        <section className={`${PAGE_CONTAINER} pb-16 md:pb-24`}>
           <div className="rounded-2xl border border-dashed border-border px-6 py-16 text-center">
-            <h2 className="text-xl font-light tracking-tight">No products yet</h2>
+            <h2 className="text-xl font-light tracking-tight">Your edit is loading</h2>
             <p className="mx-auto mt-3 max-w-md text-sm text-muted">
-              Import your SHEIN affiliate CSV to populate lookbooks and product
-              cards. Sign in, then upload at the admin sync page.
+              Import products from the admin dashboard to populate lookbooks and
+              start curating your storefront.
             </p>
             <Link
-              href="/dashboard/admin"
+              href="/admin/shein-ops"
               className="mt-6 inline-flex h-11 items-center rounded-full bg-foreground px-6 text-sm text-background"
             >
               Import products
@@ -167,6 +265,8 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      <WatchlistInvitation />
     </div>
   );
 }

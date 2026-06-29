@@ -39,20 +39,20 @@ export function RefreshTestImagesButton() {
           disabled={isPending}
           className="inline-flex h-11 items-center justify-center rounded-full bg-foreground px-6 text-sm font-medium text-background disabled:opacity-50"
         >
-          {isPending ? "Fixing images..." : "Fix broken test images"}
+          {isPending ? "Clearing..." : "Clear non-uploaded images"}
         </button>
       </form>
 
       {state.success && state.updatedCount > 0 && (
         <p className="mt-3 text-sm text-green-700">
-          Updated images for {state.updatedCount} product
-          {state.updatedCount === 1 ? "" : "s"}.
+          Cleared external images on {state.updatedCount} product
+          {state.updatedCount === 1 ? "" : "s"}. Re-upload photos in each lookbook.
         </p>
       )}
 
       {state.success && state.updatedCount === 0 && !isPending && (
         <p className="mt-3 text-sm text-muted">
-          No products with broken placeholder images found.
+          All products already use admin uploads or placeholders.
         </p>
       )}
 

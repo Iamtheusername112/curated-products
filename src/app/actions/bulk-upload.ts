@@ -10,6 +10,7 @@ import {
   parsePrice,
 } from "@/lib/affiliate";
 import { requireAdmin } from "@/lib/auth";
+import { PRODUCT_PLACEHOLDER } from "@/lib/images";
 import { slugifyCategory } from "@/lib/utils";
 import type { BulkUploadResult } from "@/types/actions";
 
@@ -144,10 +145,9 @@ function parseCsvContent(csvContent: string): {
     }
 
     const title = getValue("title");
-    const imageUrl = getValue("imageUrl");
     const affiliateLink = getValue("affiliateLink");
 
-    if (!title || !imageUrl || !affiliateLink) {
+    if (!title || !affiliateLink) {
       errors.push(`Row ${i + 1}: missing required field values`);
       continue;
     }
@@ -155,7 +155,7 @@ function parseCsvContent(csvContent: string): {
     rows.push({
       productId,
       title,
-      imageUrl,
+      imageUrl: PRODUCT_PLACEHOLDER,
       salePrice: parsePrice(getValue("salePrice")),
       retailPrice: parsePrice(getValue("retailPrice")),
       affiliateLink,
@@ -244,6 +244,7 @@ export async function bulkUploadProducts(
 
     revalidatePath("/");
     revalidatePath("/lookbook", "layout");
+    revalidatePath("/admin");
     revalidatePath("/dashboard/admin");
 
     return {

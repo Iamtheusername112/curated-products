@@ -1,23 +1,17 @@
 import { auth } from "@clerk/nextjs/server";
 
+export {
+  AdminForbiddenError,
+  isAdmin,
+  isAdminUser,
+  requireAdmin,
+} from "@/lib/admin";
+
 export async function requireAuth() {
   const { userId } = await auth();
 
   if (!userId) {
     throw new Error("Unauthorized");
-  }
-
-  return userId;
-}
-
-export async function requireAdmin() {
-  const userId = await requireAuth();
-  const adminIds =
-    process.env.ADMIN_USER_IDS?.split(",").map((id) => id.trim()).filter(Boolean) ??
-    [];
-
-  if (adminIds.length > 0 && !adminIds.includes(userId)) {
-    throw new Error("Forbidden");
   }
 
   return userId;

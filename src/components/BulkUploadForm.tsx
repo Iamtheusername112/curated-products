@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { bulkUploadProducts } from "@/app/actions/bulk-upload";
 import type { BulkUploadResult } from "@/types/actions";
-import { CURATED_CATEGORIES } from "@/lib/utils";
+import type { CategoryOption } from "@/lib/cms-queries";
 
 const initialState: BulkUploadResult = {
   success: false,
@@ -12,7 +12,11 @@ const initialState: BulkUploadResult = {
   errors: [],
 };
 
-export function BulkUploadForm() {
+type BulkUploadFormProps = {
+  categoryOptions: CategoryOption[];
+};
+
+export function BulkUploadForm({ categoryOptions }: BulkUploadFormProps) {
   const [state, formAction, isPending] = useActionState(
     bulkUploadProducts,
     initialState
@@ -35,9 +39,9 @@ export function BulkUploadForm() {
             id="category"
             name="category"
             className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
-            defaultValue="y2k-aesthetic"
+            defaultValue={categoryOptions[0]?.slug ?? "y2k-aesthetic"}
           >
-            {CURATED_CATEGORIES.map((category) => (
+            {categoryOptions.map((category) => (
               <option key={category.slug} value={category.slug}>
                 {category.label}
               </option>

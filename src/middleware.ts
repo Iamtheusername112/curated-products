@@ -1,9 +1,22 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
+const isPublicAdminRoute = createRouteMatcher([
+  "/admin/forbidden",
+  "/admin/not-configured",
+]);
+
+const isWebhookRoute = createRouteMatcher(["/api/webhooks/clerk"]);
+
+const isAdminConsoleRoute = createRouteMatcher(["/admin(.*)"]);
+
 const isProtectedRoute = createRouteMatcher(["/dashboard(.*)"]);
 
 export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
+  if (isPublicAdminRoute(req) || isWebhookRoute(req)) {
+    return;
+  }
+
+  if (isAdminConsoleRoute(req) || isProtectedRoute(req)) {
     await auth.protect();
   }
 });

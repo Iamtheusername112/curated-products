@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { products } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
-import { fixAllTestProductImages } from "@/lib/catalog-maintenance";
+import { clearAllCatalogImages } from "@/lib/catalog-maintenance";
 import type { PurgeCatalogResult, RefreshTestImagesResult } from "@/types/actions";
 
 export async function purgeAllProducts(): Promise<PurgeCatalogResult> {
@@ -24,6 +24,7 @@ export async function purgeAllProducts(): Promise<PurgeCatalogResult> {
     revalidatePath("/");
     revalidatePath("/lookbook", "layout");
     revalidatePath("/dashboard");
+    revalidatePath("/admin");
     revalidatePath("/dashboard/admin");
 
     return {
@@ -51,17 +52,18 @@ export async function refreshTestProductImages(): Promise<RefreshTestImagesResul
   }
 
   try {
-    const updatedCount = await fixAllTestProductImages();
+    const updatedCount = await clearAllCatalogImages();
     revalidatePath("/");
     revalidatePath("/lookbook", "layout");
     revalidatePath("/product", "layout");
+    revalidatePath("/admin");
     revalidatePath("/dashboard/admin");
     return { success: true, updatedCount };
   } catch (error) {
     return {
       success: false,
       updatedCount: 0,
-      error: error instanceof Error ? error.message : "Failed to refresh images",
+      error: error instanceof Error ? error.message : "Failed to clear images",
     };
   }
 }

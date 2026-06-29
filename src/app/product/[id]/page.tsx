@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
-import { WatchlistButton } from "@/components/WatchlistButton";
+import { SaveLookButton } from "@/components/SaveLookButton";
+import { ProductGallery } from "@/components/ProductGallery";
 import { getUserWatchlistedProductIds } from "@/lib/watchlist-queries";
 import { db } from "@/db";
 import { products } from "@/db/schema";
@@ -15,6 +15,9 @@ import {
 } from "@/lib/affiliate";
 import { formatCategoryLabel } from "@/lib/utils";
 import { resolveProductImageUrl } from "@/lib/images";
+import { getAudienceLabel } from "@/lib/audience";
+import { getProductImageUrls, resolveStoredProductImages } from "@/lib/product-images";
+import { PAGE_CONTAINER, PAGE_EYEBROW, PAGE_HEADING } from "@/lib/layout-classes";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -39,16 +42,17 @@ export async function generateMetadata({
       return { title: "Product Not Found" };
     }
 
+    const galleryImages = await getProductImageUrls(productId);
+    const ogImages = resolveStoredProductImages(galleryImages, product.imageUrl).map(
+      (url) => ({ url: resolveProductImageUrl(product.sheinProductId, url) })
+    );
+
     return {
       title: product.title,
       description: `Shop ${product.title} on SHEIN. Current price ${formatPrice(product.currentPrice)}.`,
       openGraph: {
         title: product.title,
-        images: [
-          {
-            url: resolveProductImageUrl(product.sheinProductId, product.imageUrl),
-          },
-        ],
+        images: ogImages.length > 0 ? ogImages : undefined,
       },
     };
   } catch {
@@ -87,29 +91,24 @@ export default async function ProductPage({ params }: PageProps) {
     product.currentPrice,
     product.originalPrice
   );
-  const redirectUrl = buildInternalRedirectUrl(product.sheinProductId);
-  const imageUrl = resolveProductImageUrl(product.sheinProductId, product.imageUrl);
+  const redirectUrl = buildInternalRedirectUrl(product.id);
+  const galleryImages = await getProductImageUrls(productId);
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-16">
+    <div className={`${PAGE_CONTAINER} py-12 md:py-16`}>
       <div className="grid gap-12 lg:grid-cols-2 lg:gap-16">
-        <div className="relative overflow-hidden bg-neutral-100">
-          <div className="relative aspect-[3/4]">
-            <Image
-              src={imageUrl}
-              alt={product.title}
-              fill
-              priority
-              sizes="(max-width: 1024px) 100vw, 50vw"
-              className="object-cover"
-            />
-          </div>
+        <div className="relative">
+          <ProductGallery
+            images={galleryImages}
+            alt={product.title}
+            priority
+          />
           {discount !== null && discount > 0 && (
-            <span className="absolute left-4 top-4 rounded-full bg-foreground px-3 py-1.5 text-sm font-medium text-background">
+            <span className="absolute left-4 top-4 z-10 rounded-full bg-foreground px-3 py-1.5 text-sm font-medium text-background">
               -{discount}% off
             </span>
           )}
-          <WatchlistButton
+          <SaveLookButton
             productId={product.id}
             isWatchlisted={watchlistedIds.has(product.id)}
           />
@@ -124,6 +123,8 @@ export default async function ProductPage({ params }: PageProps) {
               {formatCategoryLabel(product.category)}
             </Link>
           )}
+
+          <p className="mt-2 text-sm text-muted">{getAudienceLabel(product.audience)}</p>
 
           <h1 className="mt-4 text-3xl font-light tracking-tight md:text-4xl">
             {product.title}
@@ -144,11 +145,16 @@ export default async function ProductPage({ params }: PageProps) {
           </div>
 
           <p className="mt-6 leading-relaxed text-muted">
-            Track this item on your watchlist to monitor price drops. Purchases
-            through our link support the curation at no extra cost to you.
+            {product.description ??
+              "Track this item on your watchlist to monitor price drops. Purchases through our link support the curation at no extra cost to you."}
           </p>
 
-          <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <SaveLookButton
+              productId={product.id}
+              isWatchlisted={watchlistedIds.has(product.id)}
+              variant="pill"
+            />
             <a
               href={redirectUrl}
               target="_blank"
